@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рабочая панель — задачи, сроки, справки</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%232563EB'/><rect x='3' y='3' width='10' height='2' fill='white'/><rect x='3' y='7' width='6' height='2' fill='white'/><rect x='3' y='11' width='8' height='2' fill='white'/></svg>">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<style>
+:root{
+  --bg:#F1F4F9; --surface:#FFFFFF; --ink:#14181F; --muted:#5C6675;
+  --line:#E1E7F0; --accent:#2563EB; --accent-soft:#E4EDFF;
+  --red:#D83A34; --red-soft:#FDECEA; --amber:#B45309; --amber-soft:#FFF4DE;
+  --green:#157A46; --green-soft:#E3F4EA; --violet:#6D28D9;
+  --mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --sans:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;min-height:100%}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.14)}
+textarea{resize:vertical;min-height:70px}
+mark{background:#FFE08A;border-radius:2px;padding:0 1px}
+h1{font-size:20px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:16px;font-weight:700;letter-spacing:-.01em}
+h3{font-size:13px;font-weight:700}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ── Header ── */
+header{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:30px;height:30px;border-radius:7px;background:var(--accent);display:flex;flex-direction:column;justify-content:center;gap:2px;padding:6px}
+.logo-mark i{display:block;height:2.5px;background:#fff;border-radius:2px}
+.logo-mark i:nth-child(2){width:65%}
+.logo-mark i:nth-child(3){width:80%}
+.logo-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.hd-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.saved{font-size:12px;color:var(--muted)}
+.saved.ok{color:var(--green)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink);transition:background .12s,border-color .12s}
+.btn:hover{background:#F4F7FC;border-color:#CBD5E4}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#1D4ED8}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{background:#EDF1F7;color:var(--ink)}
+.btn.sm{padding:4px 9px;font-size:12px;border-radius:7px}
+.btn.danger{color:var(--red);border-color:#F1C6C3}
+.btn.danger:hover{background:var(--red-soft)}
+.btn.active-mode{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:2px;background:var(--surface);border-bottom:1px solid var(--line);padding:0 22px;overflow-x:auto}
+.tab{border:none;background:none;padding:11px 14px;font-size:13.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+
+main{max-width:1280px;margin:0 auto;padding:20px 22px 60px}
+.tabpane{display:none}
+.tabpane.on{display:block}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.card-h h2{margin-right:auto}
+.card-h .spacer{margin-left:auto}
+
+/* ── Stat tiles ── */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile .v{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .l{font-size:12px;color:var(--muted);margin-top:3px}
+.tile.warn .v{color:var(--red)}
+.tile.ok .v{color:var(--green)}
+.tile.attn .v{color:var(--amber)}
+.tile.info .v{color:var(--accent)}
+
+/* ── Banners ── */
+.banner{display:flex;align-items:center;gap:10px;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;margin-bottom:8px}
+.banner.red{background:var(--red-soft);color:var(--red)}
+.banner.amber{background:var(--amber-soft);color:var(--amber)}
+.banner.blue{background:var(--accent-soft);color:var(--accent)}
+.banner button{margin-left:auto}
+
+/* ── Toolbar / filters ── */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.toolbar .grow{flex:1;min-width:140px}
+.searchbox{position:relative}
+.searchbox input{padding-left:30px;width:220px}
+.searchbox::before{content:"⌕";position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px}
+
+/* ── Table ── */
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-size:11.5px;font-weight:700;color:var(--muted);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);background:#F8FAFD;white-space:nowrap;position:sticky;top:0}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.row-overdue{background:var(--red-soft)}
+tr.row-soon{background:var(--amber-soft)}
+tr.row-done td{color:var(--muted)}
+tr.row-done .t-title{text-decoration:line-through}
+.t-title{font-weight:600;max-width:340px}
+.t-note{font-size:12px;color:var(--muted);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2.5px 9px;border-radius:999px;white-space:nowrap}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.p-high{background:var(--red-soft);color:var(--red)}
+.badge.p-mid{background:var(--amber-soft);color:var(--amber)}
+.badge.p-low{background:#EDF1F7;color:var(--muted)}
+.badge.st-todo{background:#EDF1F7;color:var(--muted)}
+.badge.st-work{background:var(--accent-soft);color:var(--accent)}
+.badge.st-done{background:var(--green-soft);color:var(--green)}
+.badge.st-pause{background:var(--amber-soft);color:var(--amber)}
+.badge.st-cancel{background:#EDF1F7;color:var(--muted)}
+.badge.due-red{background:var(--red);color:#fff}
+.badge.due-amber{background:var(--amber);color:#fff}
+.badge.due-grey{background:#EDF1F7;color:var(--muted)}
+.badge.due-green{background:var(--green-soft);color:var(--green)}
+.badge.role{background:var(--accent-soft);color:var(--accent)}
+.badge.ok{background:var(--green-soft);color:var(--green)}
+.badge.err{background:var(--red-soft);color:var(--red)}
+.badge.violet{background:#F1EBFD;color:var(--violet)}
+
+/* ── Progress ── */
+.prog{display:flex;align-items:center;gap:8px;min-width:130px}
+.prog input[type=range]{flex:1;accent-color:var(--accent);height:4px}
+.prog .pv{font-family:var(--mono);font-size:12px;min-width:38px;text-align:right}
+.pbar{height:6px;background:#EDF1F7;border-radius:99px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
+
+/* ── Week grid ── */
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.daycol{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-height:150px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.daycol.today{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.daycol .dh{font-size:12px;font-weight:700;color:var(--muted);padding:2px 4px;display:flex;justify-content:space-between}
+.daycol.today .dh{color:var(--accent)}
+.minitask{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:5px 7px;font-size:11.5px;background:#FBFCFE;cursor:pointer}
+.minitask:hover{background:#F2F6FD}
+.minitask.p-Высокий{border-left-color:var(--red)}
+.minitask.p-Средний{border-left-color:var(--amber)}
+.minitask.p-Низкий{border-left-color:#94A3B8}
+.minitask.done{opacity:.5}
+.minitask .mt-t{font-weight:600;line-height:1.3}
+.minitask .mt-m{color:var(--muted);font-size:10.5px;margin-top:2px}
+
+/* ── Employee accordion ── */
+.empblock{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.empblock .eb-h{display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;user-select:none;flex-wrap:wrap}
+.empblock .eb-h:hover{background:#F8FAFD}
+.eb-name{font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px}
+.eb-caret{color:var(--muted);font-size:11px;transition:transform .15s}
+.empblock.open .eb-caret{transform:rotate(90deg)}
+.eb-stats{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.eb-stats b{color:var(--ink)}
+.eb-stats .bad{color:var(--red);font-weight:700}
+.eb-body{display:none;border-top:1px solid var(--line);padding:14px 16px}
+.empblock.open .eb-body{display:block}
+.eb-prog{width:130px}
+
+/* ── Question cards ── */
+.qcard{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:10px;background:var(--surface)}
+.qcard.answered{border-left:3px solid var(--green)}
+.qcard.open-q{border-left:3px solid var(--amber)}
+.q-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.q-topic{font-weight:700;font-size:13.5px}
+.q-meta{font-size:11.5px;color:var(--muted)}
+.q-text{font-size:13px;white-space:pre-wrap}
+.q-answer{margin-top:9px;background:var(--green-soft);border-radius:8px;padding:9px 12px;font-size:13px}
+.q-answer .qa-meta{font-size:11.5px;color:var(--green);font-weight:600;margin-bottom:3px}
+.q-answer textarea{background:#fff}
+
+/* ── Docs ── */
+.docrow{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;background:var(--surface);flex-wrap:wrap}
+.doc-ico{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0}
+.doc-ico.xlsx{background:var(--green-soft);color:var(--green)}
+.doc-ico.docx{background:var(--accent-soft);color:var(--accent)}
+.doc-name{font-weight:600;font-size:13px;word-break:break-all}
+.doc-meta{font-size:11.5px;color:var(--muted)}
+.doc-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+
+/* ── Modal ── */
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:40px 16px;overflow-y:auto}
+.overlay.on{display:flex}
+.modal{background:var(--surface);border-radius:14px;padding:22px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(15,23,42,.25)}
+.modal.wide{max-width:760px}
+.modal h2{margin-bottom:16px}
+.frow{margin-bottom:12px}
+.frow label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.frow input,.frow select,.frow textarea{width:100%}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+
+/* ── Misc ── */
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.section-t{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em;margin:18px 0 8px;display:flex;align-items:center;gap:8px}
+.section-t::after{content:"";flex:1;height:1px;background:var(--line)}
+.rem-day{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed var(--line)}
+.rem-day:last-child{border-bottom:none}
+.rem-date{font-family:var(--mono);font-size:11.5px;color:var(--muted);min-width:86px;padding-top:2px}
+.chip{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:1px 7px;font-size:11px;font-weight:600;margin:1px 2px}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.checks label{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer}
+.chartbox{position:relative;height:230px}
+.hist-row{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:12.5px;align-items:baseline}
+.hist-row:last-child{border-bottom:none}
+.hist-ts{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.empty{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:300;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none}
+.toast.on{opacity:1;transform:none}
+.report-body h3{margin:14px 0 6px;font-size:14px}
+.report-body table{margin:6px 0 12px}
+@media(max-width:900px){
+  .grid2{grid-template-columns:1fr}
+  .week{grid-template-columns:repeat(2,1fr)}
+  .fgrid{grid-template-columns:1fr}
+  .checks{grid-template-columns:1fr}
+  header{padding:10px 14px}
+  main{padding:14px}
+  .tabs{padding:0 14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark"><i></i><i></i><i></i></div>
+    <div>
+      <h1>Рабочая панель</h1>
+      <div class="logo-sub">задачи · сроки · справки</div>
+    </div>
+  </div>
+  <div class="hd-right">
+    <span class="saved" id="saveInd"></span>
+    <label class="small muted" for="meSel">Работаю как</label>
+    <select id="meSel" style="min-width:170px"></select>
+    <div id="modeWrap" style="display:none">
+      <button class="btn sm" id="modeEmpBtn">Сотрудник</button>
+      <button class="btn sm" id="modeMgrBtn">👑 Руководитель</button>
+    </div>
+    <button class="btn sm" id="exportBtn">Экспорт</button>
+    <button class="btn sm" id="importBtn">Импорт</button>
+    <input type="file" id="importFile" accept=".json" hidden>
+    <button class="btn sm" id="empBtn">Сотрудники</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+  <section class="tabpane" id="pane-day"></section>
+  <section class="tabpane" id="pane-week"></section>
+  <section class="tabpane" id="pane-team"></section>
+  <section class="tabpane" id="pane-q"></section>
+  <section class="tabpane" id="pane-charts"></section>
+  <section class="tabpane" id="pane-docs"></section>
+  <section class="tabpane" id="pane-report"></section>
+</main>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const pad=n=>String(n).padStart(2,'0'), iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseDate=v=>{const d=v instanceof Date?new Date(v):typeof v==='string'?new Date(v+'T12:00:00'):null;return d&&!isNaN(d)?d:null};
+const today=()=>iso(new Date()), addDays=(v,n)=>{const d=parseDate(v);d.setDate(d.getDate()+n);return iso(d)};
+const fmtDate=v=>{const d=parseDate(v);return d?`${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`:'—'};
+const fmtDT=v=>{const d=new Date(v);return isNaN(d)?'—':d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})};
+const daysBetween=(a,b)=>Math.round((parseDate(b)-parseDate(a))/86400000);
+const num=v=>Number(String(v??'').replace(/\s/g,'').replace(',','.'));
+const fmtNum=v=>Number.isFinite(Number(v))?Number(v).toLocaleString('ru-RU',{maximumFractionDigits:2}):'—';
+const priorities=['Высокий','Средний','Низкий'], statuses=['Не начата','В работе','Выполнена','На паузе','Отменена'];
+const active=t=>!['Выполнена','Отменена'].includes(t.status), overdue=t=>active(t)&&t.due&&daysBetween(t.due,today())>0;
+const soon=t=>active(t)&&t.due&&daysBetween(today(),t.due)>=0&&daysBetween(today(),t.due)<=2;
+const empName=id=>state.employees.find(e=>e.id===id)?.name||'—';
+const isActive=(id,a)=>String(id)===String(a)?'selected':'';
+const checked=v=>v?'checked':'';
+let state, me='', managerMode=false, currentTab='day', charts={}, toastTimer;
+let filters={status:'',priority:'',emp:'',hideDone:true,q:''};
+let qFilters={status:'open',emp:'',q:''};
+let weekStart=(()=>{const d=new Date(), n=(d.getDay()+6)%7;d.setDate(d.getDate()-n);return iso(d)})();
+let weekEmp='all', historyEmp='', historyQ='', chartEmp='all', reportState=null, docSearch='', openEmps={};
+const DB_KEY='working-panel-v1';
+const defaults=()=>{
+ const e1=uid(),e2=uid(),e3=uid(),t=today();
+ return {version:1,employees:[{id:e1,name:'Александра Петрова',role:'manager',active:true},{id:e2,name:'Иван Соколов',role:'employee',active:true},{id:e3,name:'Мария Козлова',role:'employee',active:true}],tasks:[
+  {id:uid(),title:'Подготовить еженедельную сводку по показателям',emp:e2,priority:'Высокий',status:'В работе',due:t,progress:60,note:'Сверить данные с финансовым отделом',created:addDays(t,-4),doneAt:null},
+  {id:uid(),title:'Сверить остатки по кассе',emp:e2,priority:'Средний',status:'Не начата',due:addDays(t,-1),progress:0,note:'Приложить подписанный акт',created:addDays(t,-5),doneAt:null},
+  {id:uid(),title:'Обновить реестр договоров',emp:e3,priority:'Средний',status:'В работе',due:addDays(t,2),progress:40,note:'Добавить новые дополнительные соглашения',created:addDays(t,-3),doneAt:null},
+  {id:uid(),title:'Проанализировать выполнение плана продаж',emp:e1,priority:'Высокий',status:'В работе',due:addDays(t,4),progress:75,note:'',created:addDays(t,-6),doneAt:null},
+  {id:uid(),title:'Согласовать график отпусков',emp:e1,priority:'Низкий',status:'Выполнена',due:addDays(t,-2),progress:100,note:'',created:addDays(t,-8),doneAt:addDays(t,-1)}
+ ],questions:[{id:uid(),emp:e2,topic:'Источник данных для сводки',text:'Какой период брать для показателя поступлений?',taskId:null,date:new Date().toISOString(),answer:'',answeredBy:'',answerDate:''}],docs:[],history:[{ts:new Date().toISOString(),emp:e1,text:'Создан демонстрационный набор данных'}]};
+};
+function normalize(s){
+ s=s&&typeof s==='object'?s:{};
+ for(const k of ['employees','tasks','questions','docs','history']) if(!Array.isArray(s[k]))s[k]=[];
+ s.employees=s.employees.filter(e=>e&&e.id&&e.name).map(e=>({id:String(e.id),name:String(e.name).slice(0,120),role:e.role==='manager'?'manager':'employee',active:e.active!==false}));
+ const ids=new Set(s.employees.map(e=>e.id));
+ s.tasks=s.tasks.filter(t=>t&&t.id&&t.title&&ids.has(t.emp)).map(t=>({id:String(t.id),title:String(t.title).slice(0,300),emp:String(t.emp),priority:priorities.includes(t.priority)?t.priority:'Средний',status:statuses.includes(t.status)?t.status:'Не начата',due:parseDate(t.due||'')?t.due:'',progress:Math.max(0,Math.min(100,+t.progress||0)),note:String(t.note||'').slice(0,3000),created:parseDate(t.created||today())?t.created:today(),doneAt:t.doneAt||null}));
+ s.questions=s.questions.filter(q=>q&&q.id&&ids.has(q.emp)).map(q=>({id:String(q.id),emp:q.emp,topic:String(q.topic||'Без темы').slice(0,200),text:String(q.text||''),taskId:q.taskId||null,date:q.date||new Date().toISOString(),answer:q.answer||'',answeredBy:q.answeredBy||'',answerDate:q.answerDate||''}));
+ s.history=s.history.filter(h=>h&&h.ts&&h.text).slice(0,800);
+ s.docs=s.docs.filter(d=>d&&d.id&&d.name&&['excel','word'].includes(d.type)).map(d=>({id:String(d.id),name:String(d.name),type:d.type,size:+d.size||0,date:d.date||new Date().toISOString(),sheets:Array.isArray(d.sheets)?d.sheets.filter(sh=>sh&&Array.isArray(sh.rows)).slice(0,100):[],text:String(d.text||''),errors:Array.isArray(d.errors)?d.errors.filter(e=>e&&e.desc):[],base64:typeof d.base64==='string'&&d.base64.startsWith('data:')?d.base64:''}));
+ return s;
+}
+function load(){try{state=normalize(JSON.parse(localStorage.getItem(DB_KEY)));if(!state.employees.length)state=defaults()}catch(e){state=defaults()}}
+function save(){try{localStorage.setItem(DB_KEY,JSON.stringify(state));const el=$('#saveInd');el.textContent='✓ сохранено '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});el.classList.add('ok')}catch(e){toast('Не удалось сохранить: хранилище переполнено. Удалите лишние справки или сделайте экспорт.')}}
+function log(text){state.history.unshift({ts:new Date().toISOString(),emp:me,text});state.history=state.history.slice(0,800)}
+function commit(text){if(text)log(text);save();render()}
+function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),3500)}
+function mark(v,q){const s=esc(v);if(!q)return s;const re=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return re?s.replace(new RegExp('('+re+')','gi'),'<mark>$1</mark>'):s}
+function currentEmp(){return state.employees.find(e=>e.id===me)}
+function renderHeader(){
+ const sel=$('#meSel');sel.innerHTML=state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,me)}>${esc(e.name)}${e.role==='manager'?' 👑':''}</option>`).join('');
+ $('#modeWrap').style.display=currentEmp()?.role==='manager'?'flex':'none';$('#modeWrap').style.gap='3px';
+ $('#modeEmpBtn').classList.toggle('active-mode',!managerMode);$('#modeMgrBtn').classList.toggle('active-mode',managerMode);
+}
+function renderTabs(){
+ const tabs=[['day','Мой день'],['week','Неделя'],['team','Обзор команды'],['q','Вопросы',state.questions.filter(q=>!q.answer).length],['charts','Динамика'],['docs','Справки',state.docs.length],['report','Справка по запросу']];
+ $('#tabs').innerHTML=tabs.map(([id,n,c])=>`<button class="tab ${currentTab===id?'on':''}" data-tab="${id}">${n}${c?` <span class="badge due-grey">${c}</span>`:''}</button>`).join('');
+ $$('.tabpane').forEach(p=>p.classList.toggle('on',p.id===`pane-${currentTab}`));
+}
+function render(){renderHeader();renderTabs();({day:renderDay,week:renderWeek,team:renderTeam,q:renderQuestions,charts:renderCharts,docs:renderDocs,report:renderReport}[currentTab])();}
+function dueBadge(t){if(!t.due)return '<span class="muted">—</span>';if(!active(t))return `<span class="badge due-green">${fmtDate(t.due)}</span>`;const d=daysBetween(today(),t.due);if(d<0)return `<span class="badge due-red">просрочено ${-d} дн.</span>`;if(d===0)return '<span class="badge due-red">сегодня!</span>';if(d===1)return '<span class="badge due-amber">завтра</span>';return `<span class="badge ${d<=2?'due-amber':'due-grey'}">через ${d} дн. · ${fmtDate(t.due)}</span>`}
+function sortTasks(a,b){const ad=active(a)?0:1,bd=active(b)?0:1;if(ad!==bd)return ad-bd;const p=priorities.indexOf(a.priority)-priorities.indexOf(b.priority);if(p)return p;if(a.due&&b.due)return a.due.localeCompare(b.due);if(a.due)return -1;if(b.due)return 1;return String(a.created).localeCompare(String(b.created))}
+function filteredTasks(list){return list.filter(t=>(!filters.status||t.status===filters.status)&&(!filters.priority||t.priority===filters.priority)&&(!filters.emp||t.emp===filters.emp)&&(!filters.hideDone||active(t))&&(!filters.q||(t.title+' '+t.note).toLowerCase().includes(filters.q.toLowerCase()))).sort(sortTasks)}
+function taskTable(list,{showEmp=true,q=''}={}){
+ if(!list.length)return '<div class="empty">Задачи не найдены. Измените фильтры или добавьте новую задачу.</div>';
+ return `<div class="tblwrap"><table><thead><tr><th>Задача</th>${showEmp?'<th>Сотрудник</th>':''}<th>Приоритет</th><th>Статус</th><th>Срок</th><th>Исполнение</th><th>Действия</th></tr></thead><tbody>${list.map(t=>`<tr class="${overdue(t)?'row-overdue':soon(t)?'row-soon':''} ${active(t)?'':'row-done'}" data-taskrow="${t.id}">
+ <td><div class="t-title" data-task="${t.id}">${mark(t.title,q)}</div>${t.note?`<div class="t-note" title="${esc(t.note)}">${mark(t.note,q)}</div>`:''}</td>
+ ${showEmp?`<td>${esc(empName(t.emp))}</td>`:''}
+ <td><span class="badge p-${t.priority==='Высокий'?'high':t.priority==='Средний'?'mid':'low'}"><i class="dot"></i>${t.priority}</span></td>
+ <td><span class="badge st-${{'Не начата':'todo','В работе':'work','Выполнена':'done','На паузе':'pause','Отменена':'cancel'}[t.status]}">${t.status}</span></td><td>${dueBadge(t)}</td>
+ <td><div class="prog"><input type="range" min="0" max="100" step="5" value="${t.progress}" data-progress="${t.id}" aria-label="Исполнение ${esc(t.title)}"><span class="pv num" data-pv="${t.id}">${t.progress}%</span></div></td>
+ <td style="white-space:nowrap"><button class="btn sm ghost" data-complete="${t.id}" title="${t.status==='Выполнена'?'Вернуть в работу':'Отметить выполненной'}">${t.status==='Выполнена'?'↩':'✓'}</button><button class="btn sm ghost" data-edit="${t.id}" title="Редактировать">✎</button><button class="btn sm ghost" data-del-task="${t.id}" title="Удалить">×</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+function filterBar({emp=false}={}){return `<div class="toolbar"><select data-filter="status"><option value="">Все статусы</option>${statuses.map(s=>`<option ${isActive(s,filters.status)}>${s}</option>`).join('')}</select><select data-filter="priority"><option value="">Любой приоритет</option>${priorities.map(p=>`<option ${isActive(p,filters.priority)}>${p}</option>`).join('')}</select>${emp?`<select data-filter="emp"><option value="">Все сотрудники</option>${state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,filters.emp)}>${esc(e.name)}</option>`).join('')}</select>`:''}<label class="small"><input type="checkbox" data-filter="hideDone" ${checked(filters.hideDone)}> скрыть выполненные</label><div class="searchbox" style="margin-left:auto"><input data-filter="q" value="${esc(filters.q)}" placeholder="Поиск по задачам"></div></div>`}
+function tiles(items){return `<div class="tiles">${items.map(([l,v,c=''])=>`<div class="tile ${c}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>`}
+function renderDay(){
+ const list=state.tasks.filter(t=>t.emp===me), act=list.filter(active), od=list.filter(overdue), td=list.filter(t=>active(t)&&t.due===today()), week=list.filter(t=>active(t)&&t.due&&daysBetween(today(),t.due)>=0&&daysBetween(today(),t.due)<=7),done=list.filter(t=>t.doneAt&&daysBetween(t.doneAt,today())<=7&&daysBetween(t.doneAt,today())>=0),qs=state.questions.filter(q=>q.emp===me&&!q.answer);
+ const reminders=Array.from({length:7},(_,i)=>{const d=addDays(today(),i),tasks=act.filter(t=>t.due===d).sort(sortTasks);return (tasks.length||i===0)?`<div class="rem-day"><div class="rem-date">${i===0?'Сегодня':i===1?'Завтра':fmtDate(d)}</div><div>${tasks.length?tasks.map(t=>`<div class="small" style="margin-bottom:5px"><span class="badge p-${t.priority==='Высокий'?'high':t.priority==='Средний'?'mid':'low'}">${t.priority}</span> <a href="#" data-task="${t.id}" style="color:inherit">${esc(t.title)}</a> <span class="muted">${t.progress}%</span></div>`).join(''):'<span class="muted small">Сроков нет</span>'}</div></div>`:''}).join('');
+ $('#pane-day').innerHTML=`${od.length?`<div class="banner red">Просрочено задач: <b>${od.length}</b><button class="btn sm" data-goto-overdue>Показать</button></div>`:''}${td.length?`<div class="banner amber">Срок сегодня: ${td.map(t=>esc(t.title)).join('; ')}</div>`:''}${qs.length?`<div class="banner blue">Открытых вопросов без ответа: ${qs.length}<button class="btn sm" data-tab="q">Перейти к вопросам</button></div>`:''}
+ ${tiles([['Активных',act.length,'info'],['Просрочено',od.length,od.length?'warn':''],['Срок сегодня',td.length,td.length?'attn':''],['Срок на неделе',week.length],['Выполнено за 7 дней',done.length,'ok'],['Открытых вопросов',qs.length,qs.length?'attn':'']])}
+ <div class="card"><div class="card-h"><h2>Мои задачи</h2><button class="btn primary" data-new-task>+ Задача</button></div>${filterBar()}${taskTable(filteredTasks(list),{showEmp:false,q:filters.q})}</div>
+ <div class="grid2"><div class="card"><div class="card-h"><h2>Напоминания на 7 дней</h2></div>${reminders}</div>
+ <div class="card"><div class="card-h"><h2>Задать вопрос</h2></div><form id="quickQuestion"><div class="frow"><label>Тема</label><input name="topic" required maxlength="200"></div><div class="frow"><label>Вопрос</label><textarea name="text" required></textarea></div><div class="frow"><label>Привязать к задаче (необязательно)</label><select name="taskId"><option value="">Без задачи</option>${act.map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('')}</select></div><button class="btn primary">Отправить вопрос</button></form></div></div>`;
+}
+function renderWeek(){
+ const days=Array.from({length:7},(_,i)=>addDays(weekStart,i)), list=state.tasks.filter(t=>t.due&&(weekEmp==='all'||t.emp===weekEmp));
+ $('#pane-week').innerHTML=`<div class="card"><div class="card-h"><button class="btn" data-week="-7">← Пред.</button><button class="btn" data-week="now">Текущая</button><button class="btn" data-week="7">След. →</button><h2 style="margin-left:12px">${fmtDate(days[0])} — ${fmtDate(days[6])}</h2><select data-week-emp style="margin-left:auto"><option value="all">Вся команда</option>${state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,weekEmp)}>${esc(e.name)}</option>`).join('')}</select></div><div class="week">${days.map(d=>{const dayTasks=list.filter(t=>t.due===d).sort(sortTasks);return `<div class="daycol ${d===today()?'today':''}"><div class="dh"><span>${d.toDateString?d.toDateString():new Date(d+'T12:00:00').toLocaleDateString('ru-RU',{weekday:'short'})}</span><span>${fmtDate(d).slice(0,5)}</span></div>${dayTasks.map(t=>`<div class="minitask p-${t.priority} ${active(t)?'':'done'}" data-task="${t.id}"><div class="mt-t">${esc(t.title)}</div><div class="mt-m">${esc(empName(t.emp))} · ${t.progress}%</div></div>`).join('')||'<div class="empty" style="padding:15px 0">—</div>'}</div>`}).join('')}</div></div>
+ <div class="card"><div class="card-h"><h2>Напоминания на неделю</h2></div>${weekReminders()}</div>`;
+}
+function weekReminders(){
+ const list=state.tasks.filter(t=>(weekEmp==='all'||t.emp===weekEmp)&&active(t)&&t.due&&(overdue(t)||(t.due>=weekStart&&t.due<=addDays(weekStart,6))));
+ if(!list.length)return '<div class="empty">На эту неделю напоминаний нет.</div>';
+ return list.sort(sortTasks).map(t=>`<div class="rem-day"><div class="rem-date">${overdue(t)?'Просрочено':fmtDate(t.due)}</div><div><a href="#" data-task="${t.id}" style="color:inherit;font-weight:600">${esc(t.title)}</a><div class="small muted">${esc(empName(t.emp))} · ${t.priority} · ${t.progress}%</div></div><span style="margin-left:auto">${dueBadge(t)}</span></div>`).join('');
+}
+function avgProgress(tasks){const a=tasks.filter(active);return a.length?Math.round(a.reduce((s,t)=>s+t.progress,0)/a.length):100}
+function renderTeam(){
+ if(currentEmp()?.role==='manager'&&!managerMode){$('#pane-team').innerHTML='<div class="card empty"><h2 style="margin-bottom:10px">Обзор команды доступен в режиме руководителя</h2><p style="margin-bottom:16px">Переключитесь в шапке панели, чтобы увидеть загрузку всех сотрудников.</p><button class="btn primary" data-enable-manager>Включить режим руководителя</button></div>';return}
+ const act=state.tasks.filter(active), od=state.tasks.filter(overdue),open=state.questions.filter(q=>!q.answer),emps=state.employees.filter(e=>e.active);
+ $('#pane-team').innerHTML=`${tiles([['Сотрудников',emps.length,'info'],['Активных задач',act.length],['Просрочено',od.length,od.length?'warn':''],['Высокий приоритет',act.filter(t=>t.priority==='Высокий').length,'attn'],['Выполнено за 7 дней',state.tasks.filter(t=>t.doneAt&&daysBetween(t.doneAt,today())>=0&&daysBetween(t.doneAt,today())<=7).length,'ok'],['Вопросов без ответа',open.length,open.length?'attn':'']])}
+ ${od.length?`<div class="card"><div class="card-h"><h2>Просроченные задачи</h2></div>${taskTable(od.sort(sortTasks))}</div>`:''}${open.length?`<div class="card"><div class="card-h"><h2>Открытые вопросы в моменте</h2><button class="btn sm" data-tab="q">Все вопросы</button></div>${open.map(q=>questionCard(q,true)).join('')}</div>`:''}
+ <div class="section-t">По сотрудникам</div>${emps.map(e=>{const t=state.tasks.filter(x=>x.emp===e.id),a=t.filter(active),o=t.filter(overdue),q=state.questions.filter(x=>x.emp===e.id&&!x.answer);if(openEmps[e.id]===undefined)openEmps[e.id]=!!(o.length||q.length);const avg=avgProgress(t);return `<div class="empblock ${openEmps[e.id]?'open':''}"><div class="eb-h" data-emp-toggle="${e.id}"><span class="eb-caret">▶</span><span class="eb-name">${esc(e.name)} ${e.role==='manager'?'<span class="badge role">👑 руководитель</span>':''}</span><div class="eb-stats"><span>активных <b>${a.length}</b></span><span>просрочено <b class="${o.length?'bad':''}">${o.length}</b></span><span>выполнено <b>${t.filter(x=>x.status==='Выполнена').length}</b></span><span>вопросов <b class="${q.length?'bad':''}">${q.length}</b></span></div><div class="eb-prog" style="margin-left:auto"><div class="pbar"><i style="width:${avg}%"></i></div><div class="small muted" style="text-align:right">${avg}%</div></div></div><div class="eb-body"><div class="toolbar"><button class="btn primary sm" data-new-task="${e.id}">+ Задача</button></div>${taskTable(t.sort(sortTasks),{showEmp:false})}</div></div>`}).join('')}
+ <div class="card" style="margin-top:18px"><div class="card-h"><h2>Все задачи команды</h2><button class="btn primary" data-new-task>+ Задача</button></div>${filterBar({emp:true})}${taskTable(filteredTasks(state.tasks),{q:filters.q})}</div>`;
+}
+function questionCard(q,compact=false){const task=state.tasks.find(t=>t.id===q.taskId);return `<div class="qcard ${q.answer?'answered':'open-q'}" id="q-${q.id}"><div class="q-head"><span class="q-topic">${esc(q.topic)}</span><span class="badge ${q.answer?'ok':'due-amber'}">${q.answer?'ответ получен':'ждёт ответа'}</span><span class="q-meta">${esc(empName(q.emp))} · ${fmtDT(q.date)}</span>${task?`<button class="chip" data-task="${task.id}" style="border:none">↳ ${esc(task.title.slice(0,45))}</button>`:''}${currentEmp()?.role==='manager'?`<button class="btn sm ghost" style="margin-left:auto;color:var(--red)" data-del-q="${q.id}" title="Удалить вопрос">×</button>`:''}</div><div class="q-text">${mark(q.text,qFilters.q)}</div>${q.answer?`<div class="q-answer"><div class="qa-meta">${esc(empName(q.answeredBy))} · ${fmtDT(q.answerDate)}</div>${mark(q.answer,qFilters.q)}</div>`:''}${((!q.answer&&(q.emp===me||currentEmp()?.role==='manager'))||(q.answer&&(q.answeredBy===me||currentEmp()?.role==='manager')))&&!compact?`<form data-answer-form="${q.id}" class="q-answer" style="background:#F5F8FD"><div class="frow" style="margin-bottom:7px"><label>${q.answer?'Изменить ответ':'Ответить'}</label><textarea name="answer" required>${esc(q.answer)}</textarea></div><button class="btn primary sm">Сохранить ответ</button></form>`:''}</div>`}
+function renderQuestions(){
+ let list=state.questions.filter(q=>(qFilters.status==='all'||(qFilters.status==='open'?!q.answer:!!q.answer))&&(!qFilters.emp||q.emp===qFilters.emp)&&(!qFilters.q||(q.topic+' '+q.text+' '+q.answer).toLowerCase().includes(qFilters.q.toLowerCase())));
+ $('#pane-q').innerHTML=`<div class="card"><div class="card-h"><h2>Вопросы в моменте</h2><button class="btn primary" data-new-q>+ Вопрос</button></div><div class="toolbar"><select data-qfilter="status"><option value="open" ${isActive('open',qFilters.status)}>Открытые</option><option value="answered" ${isActive('answered',qFilters.status)}>С ответом</option><option value="all" ${isActive('all',qFilters.status)}>Все</option></select><select data-qfilter="emp"><option value="">Все сотрудники</option>${state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,qFilters.emp)}>${esc(e.name)}</option>`).join('')}</select><div class="searchbox" style="margin-left:auto"><input data-qfilter="q" value="${esc(qFilters.q)}" placeholder="Поиск по вопросам"></div></div>${list.map(q=>questionCard(q)).join('')||'<div class="empty">Вопросы не найдены.</div>'}</div>`;
+}
+function renderCharts(){
+ const emp=chartEmp,tasks=state.tasks.filter(t=>emp==='all'||t.emp===emp),days=Array.from({length:14},(_,i)=>addDays(today(),i-13));
+ const created=days.map(d=>tasks.filter(t=>t.created===d).length),done=days.map(d=>tasks.filter(t=>t.doneAt===d).length),activeSeries=days.map(d=>tasks.filter(t=>t.created<=d&&(!t.doneAt||t.doneAt>d)&&t.status!=='Отменена').length);
+ $('#pane-charts').innerHTML=`<div class="toolbar"><select data-chart-emp><option value="all">Вся команда</option>${state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,chartEmp)}>${esc(e.name)}</option>`).join('')}</select></div><div class="grid2"><div class="card"><div class="card-h"><h2>Динамика за 14 дней</h2></div><div class="chartbox"><canvas id="lineChart"></canvas></div></div><div class="card"><div class="card-h"><h2>Задачи по статусам</h2></div><div class="chartbox"><canvas id="pieChart"></canvas></div></div></div>
+ <div class="card"><div class="card-h"><h2>Журнал изменений</h2><span class="small muted">${state.history.length} / 800 записей</span></div><div class="toolbar"><select data-hist-emp><option value="">Все сотрудники</option>${state.employees.map(e=>`<option value="${e.id}" ${isActive(e.id,historyEmp)}>${esc(e.name)}</option>`).join('')}</select><div class="searchbox"><input data-hist-q value="${esc(historyQ)}" placeholder="Поиск по журналу"></div></div><div id="historyList">${historyList()}</div></div>`;
+ if(window.Chart){Object.values(charts).forEach(c=>c.destroy());charts.line=new Chart($('#lineChart'),{type:'line',data:{labels:days.map(d=>fmtDate(d).slice(0,5)),datasets:[{label:'Создано',data:created,borderColor:'#2563EB',backgroundColor:'#2563EB20',tension:.3},{label:'Выполнено',data:done,borderColor:'#157A46',backgroundColor:'#157A4620',tension:.3},{label:'Активных на дату',data:activeSeries,borderColor:'#B45309',backgroundColor:'#B4530920',tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10}}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+ charts.pie=new Chart($('#pieChart'),{type:'doughnut',data:{labels:statuses,datasets:[{data:statuses.map(s=>state.tasks.filter(t=>t.status===s).length),backgroundColor:['#94A3B8','#2563EB','#157A46','#E7A83B','#D1D5DB'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10}}}}})}else $('#lineChart').parentElement.innerHTML='<div class="empty">Для графиков нужна библиотека Chart.js. Проверьте подключение к интернету и перезагрузите страницу.</div>';
+}
+function historyList(){const list=state.history.filter(h=>(!historyEmp||h.emp===historyEmp)&&(!historyQ||h.text.toLowerCase().includes(historyQ.toLowerCase())));return list.slice(0,150).map(h=>`<div class="hist-row"><span class="hist-ts">${fmtDT(h.ts)}</span><b>${esc(empName(h.emp))}</b><span>${mark(h.text,historyQ)}</span></div>`).join('')||'<div class="empty">Событий нет.</div>'}
+function renderDocs(){
+ $('#pane-docs').innerHTML=`<div class="card"><div class="card-h"><h2>Библиотека справок</h2><span class="small muted">Расчёты проверяются автоматически после загрузки</span></div><div class="toolbar"><label class="btn primary" for="docFiles">Загрузить файлы</label><input type="file" id="docFiles" accept=".xlsx,.xls,.csv,.docx" multiple hidden><button class="btn" id="checkAllDocs" ${state.docs.length?'':'disabled'}>Проверить все</button><button class="btn danger" id="clearAllDocs" ${state.docs.length?'':'disabled'}>Очистить всё</button><span class="small muted">Excel: .xlsx, .xls, .csv · Word: .docx · до 50 файлов</span></div><div id="docUploadStatus" class="small muted"></div></div>
+ <div class="card"><div class="card-h"><h2>Поиск по содержимому</h2></div><div class="toolbar"><div class="searchbox grow"><input id="docSearchInput" class="grow" style="width:100%" value="${esc(docSearch)}" placeholder="Слово, число или фраза"></div><button class="btn" id="docSearchBtn">Найти</button></div><div id="docSearchResults">${docSearch?docSearchHTML(docSearch):'<div class="empty">Загрузите справки и введите запрос — поиск работает без открытия файлов.</div>'}</div></div>
+ <div id="docList">${state.docs.length?state.docs.map(docRow).join(''):'<div class="card empty">Справок пока нет. Загрузите первый файл кнопкой выше.</div>'}</div>`;
+}
+function docRow(d){const errors=d.errors||[];return `<div class="docrow"><div class="doc-ico ${d.type==='excel'?'xlsx':'docx'}">${d.type==='excel'?'XLS':'DOC'}</div><div><div class="doc-name">${esc(d.name)}</div><div class="doc-meta">${fmtDT(d.date)} · ${Math.round(d.size/1024).toLocaleString('ru-RU')} КБ${d.type==='excel'?` · листов: ${d.sheets?.length||0}`:` · символов: ${(d.text||'').length.toLocaleString('ru-RU')}`}</div></div><span class="badge ${errors.length?'err':'ok'}">${errors.length?'ошибок: '+errors.length:'расчёты ок'}</span><div class="doc-actions"><button class="btn sm" data-doc-errors="${d.id}">Проверка</button>${d.base64?'<button class="btn sm" data-doc-download="'+d.id+'">Скачать</button>':''}<button class="btn sm danger" data-doc-del="${d.id}">Удалить</button></div></div>`}
+function docSearchHTML(query){
+ const results=[];const ql=query.toLowerCase();const needle=esc(query);
+ outer:for(const d of state.docs){if(d.type==='excel'){for(const s of d.sheets||[]){for(let ri=0;ri<s.rows.length;ri++){const row=s.rows[ri];for(let ci=0;ci<row.length;ci++){const c=row[ci];const v=cellText(c);if(v.toLowerCase().includes(ql)){results.push(`<div class="hist-row" style="align-items:flex-start"><span class="hist-ts">${esc(d.name)}<br>${esc(s.name)} · строка ${ri+1}</span><span>${row.map(c=>mark(cellText(c),query)).join(' · ')}</span></div>`);if(results.length>=50)break outer;break}}}}}else{const text=d.text||'';let pos=0;while((pos=text.toLowerCase().indexOf(ql,pos))>=0){const from=Math.max(0,pos-100),to=Math.min(text.length,pos+query.length+160);results.push(`<div class="hist-row" style="align-items:flex-start"><span class="hist-ts">${esc(d.name)}</span><span>${mark(text.slice(from,to),query)}</span></div>`);pos+=query.length;if(results.length>=50)break outer}}}
+ return results.length?`<div class="small muted" style="margin-bottom:10px">Показаны ${results.length}${results.length>=50?' первых 50':''} совпадений</div>${results.join('')}`:'<div class="empty">Совпадений не найдено.</div>';
+}
+function auditErrorsHTML(d){return (d.errors||[]).slice(0,60).map(e=>`<tr><td>${esc(e.kind)}</td><td>${esc(e.sheet||'')}</td><td class="num">${esc(e.cell||'')}</td><td>${esc(e.desc)}</td></tr>`).join('')}
+function renderReport(){
+ const settings=reportState||{from:addDays(today(),-7),to:today(),emp:'all',parts:{tasks:true,overdue:true,questions:true,docs:true,dynamics:true},format:'html'};
+ $('#pane-report').innerHTML=`<div class="card"><div class="card-h"><h2>Справка по запросу</h2><span class="small muted">Сведения по задачам, вопросам и загруженным документам</span></div><form id="reportForm"><div class="fgrid"><div class="frow"><label>Период с</label><input type="date" name="from" value="${settings.from}" required></div><div class="frow"><label>Период по</label><input type="date" name="to" value="${settings.to}" required></div></div><div class="frow"><label>Сотрудник</label><select name="emp"><option value="all">Вся команда</option>${state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,settings.emp)}>${esc(e.name)}</option>`).join('')}</select></div><div class="frow"><label>Разделы справки</label><div class="checks">${[['tasks','Сводка по задачам'],['overdue','Просрочки'],['questions','Открытые вопросы'],['docs','Справки и расхождения'],['dynamics','Динамика за 7 дней']].map(([v,l])=>`<label><input type="checkbox" name="parts" value="${v}" ${checked(settings.parts[v])}>${l}</label>`).join('')}</div></div><div class="toolbar"><button class="btn primary" data-report-format="html">Показать на экране</button><button class="btn" data-report-format="docx">Выгрузить Word</button><button class="btn" data-report-format="xlsx">Выгрузить Excel</button><button class="btn" data-report-format="copy">Копировать в буфер</button></div></form></div><div id="reportResult">${settings.format==='html'&&settings.generated?reportHTML(settings):''}</div>`;
+}
+function reportData(s){
+ const inPeriod=v=>v&&v>=s.from&&v<=s.to;const tasks=state.tasks.filter(t=>(s.emp==='all'||t.emp===s.emp)&&inPeriod(t.created)||((s.emp==='all'||t.emp===s.emp)&&t.doneAt&&inPeriod(t.doneAt))||((s.emp==='all'||t.emp===s.emp)&&overdue(t)));
+ const team=s.emp==='all'?'Вся команда':empName(s.emp),parts=s.parts;
+ return {title:'Сводная справка',meta:`${team} · ${fmtDate(s.from)} — ${fmtDate(s.to)} · сформировано ${fmtDT(new Date())}`,s,tasks,overdue:state.tasks.filter(t=>overdue(t)&&(s.emp==='all'||t.emp===s.emp)),questions:state.questions.filter(q=>!q.answer&&(s.emp==='all'||q.emp===s.emp)),sections:parts};
+}
+function reportHTML(s){
+ const r=reportData(s),p=r.sections;
+ let h=`<div class="card report-body"><h2>${r.title}</h2><p class="muted">${r.meta}</p>`;
+ if(p.tasks)h+=`<h3>Сводка по задачам</h3><p>В периоде: ${r.tasks.length} · активных: ${r.tasks.filter(active).length} · выполнено: ${r.tasks.filter(t=>t.status==='Выполнена').length}</p>${reportTable(['Задача','Сотрудник','Приоритет','Статус','Срок','Исполнение'],r.tasks.sort(sortTasks).map(t=>[t.title,empName(t.emp),t.priority,t.status,fmtDate(t.due),t.progress+'%']))}`;
+ if(p.overdue)h+=`<h3>Просрочки</h3><p>Просроченных задач: ${r.overdue.length}</p>${reportTable(['Задача','Сотрудник','Срок','Просрочено','Приоритет'],r.overdue.sort(sortTasks).map(t=>[t.title,empName(t.emp),fmtDate(t.due),daysBetween(t.due,today())+' дн.',t.priority]))}`;
+ if(p.questions)h+=`<h3>Открытые вопросы</h3><p>Без ответа: ${r.questions.length}</p>${reportTable(['Тема','Сотрудник','Вопрос','Дата'],r.questions.map(q=>[q.topic,empName(q.emp),q.text,fmtDT(q.date)]))}`;
+ if(p.docs)h+=`<h3>Загруженные справки</h3><p>Файлов: ${state.docs.length} · расхождений: ${state.docs.reduce((n,d)=>n+(d.errors||[]).length,0)}</p>${reportTable(['Файл','Тип','Дата загрузки','Результат'],state.docs.map(d=>[d.name,d.type,fmtDT(d.date),d.errors?.length?'Ошибок: '+d.errors.length:'Расчёты ок']))}<h3>Расхождения в расчётах</h3>${reportTable(['Файл','Лист / ячейка','Тип','Описание'],state.docs.flatMap(d=>(d.errors||[]).map(e=>[d.name,(e.sheet||'')+' '+(e.cell||''),e.kind,e.desc])))}`;
+ if(p.dynamics){const days=Array.from({length:7},(_,i)=>addDays(today(),i-6));h+=`<h3>Динамика за 7 дней</h3>${reportTable(['Дата','Создано','Выполнено','Активных на дату'],days.map(d=>[fmtDate(d),r.tasks.filter(t=>t.created===d).length,r.tasks.filter(t=>t.doneAt===d).length,r.tasks.filter(t=>t.created<=d&&(!t.doneAt||t.doneAt>d)).length]))}`;
+ return h+'</div>';
+}
+}
+function reportTable(head,rows){return `<div class="tblwrap"><table><thead><tr>${head.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${head.length}" class="muted">Нет данных</td></tr>`}</tbody></table></div>`}
+function collectReport(){
+ reportState=reportState||{parts:{}};const f=$('#reportForm');if(!f.reportValidity())return null;const fd=new FormData(f);reportState.from=fd.get('from');reportState.to=fd.get('to');reportState.emp=fd.get('emp');reportState.parts={};fd.getAll('parts').forEach(v=>reportState.parts[v]=true);return reportState;
+}
+async function exportReport(format){
+ const s=collectReport();if(!s)return;if(s.from>s.to){toast('Дата начала не может быть позже даты окончания');return}if(!Object.values(s.parts).some(Boolean)){toast('Выберите хотя бы один раздел справки');return}s.format=format;if(format==='html'){s.generated=true;renderReport();return}
+ const r=reportData(s),name=`Сводная_справка_${s.from}_${s.to}`;
+ if(format==='copy'){const text=reportText(r);try{await navigator.clipboard.writeText(text);toast('Справка скопирована в буфер обмена')}catch(e){openModal(`<h2>Скопируйте справку</h2><textarea style="width:100%;min-height:350px">${esc(text)}</textarea><div class="modal-actions"><button class="btn" data-close>Закрыть</button></div>`)}return}
+ if(format==='xlsx'){if(!window.XLSX)return libError('SheetJS');const wb=XLSX.utils.book_new();const add=(name,head,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head,...rows]),name);
+ if(s.parts.tasks)add('Задачи',['Задача','Сотрудник','Приоритет','Статус','Срок','Исполнение','Примечание'],r.tasks.map(t=>[t.title,empName(t.emp),t.priority,t.status,t.due,t.progress,t.note]));if(s.parts.overdue)add('Просрочки',['Задача','Сотрудник','Срок','Дней просрочки'],r.overdue.map(t=>[t.title,empName(t.emp),t.due,daysBetween(t.due,today())]));if(s.parts.questions)add('Вопросы',['Тема','Текст','Сотрудник','Дата'],r.questions.map(q=>[q.topic,q.text,empName(q.emp),q.date]));if(s.parts.docs){add('Справки',['Файл','Тип','Дата','Размер','Листов / символов','Ошибок'],state.docs.map(d=>[d.name,d.type,d.date,d.size,d.type==='excel'?d.sheets.length:d.text.length,d.errors.length]));add('Расхождения',['Файл','Лист','Ячейка','Тип','Описание'],state.docs.flatMap(d=>d.errors.map(e=>[d.name,e.sheet,e.cell,e.kind,e.desc])))}if(s.parts.dynamics){const days=Array.from({length:7},(_,i)=>addDays(today(),i-6));add('Динамика',['Дата','Создано','Выполнено'],days.map(d=>[d,r.tasks.filter(t=>t.created===d).length,r.tasks.filter(t=>t.doneAt===d).length]))}if(!wb.SheetNames.length)return toast('Выберите хотя бы один раздел справки');wb.Sheets[wb.SheetNames[0]]['!cols']=[{wch:35},{wch:22},{wch:18},{wch:18},{wch:18},{wch:16}];XLSX.writeFile(wb,name+'.xlsx');log('Выгружена сводная справка Excel');save();toast('Справка Excel сформирована')}
+ if(format==='docx'){if(!window.docx)return libError('docx.js');try{const {Document,Packer,Paragraph,TextRun,HeadingLevel,Table,TableRow,TableCell,WidthType}=docx;const children=[new Paragraph({text:r.title,heading:HeadingLevel.TITLE}),new Paragraph({children:[new TextRun({text:r.meta,color:'666666',size:20})]})];const addSection=(title,head,rows)=>{children.push(new Paragraph({text:title,heading:HeadingLevel.HEADING_1,spacing:{before:300,after:120}}));if(!rows.length){children.push(new Paragraph('Нет данных'));return}const makeRow=(row,bold=false)=>new TableRow({children:row.map(c=>new TableCell({children:[new Paragraph({children:[new TextRun({text:String(c),bold})]})]}))});children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[makeRow(head,true),...rows.map(x=>makeRow(x))]}))};
+ if(s.parts.tasks)addSection('Сводка по задачам',['Задача','Сотрудник','Статус','Срок','Исполнение'],r.tasks.map(t=>[t.title,empName(t.emp),t.status,fmtDate(t.due),t.progress+'%']));if(s.parts.overdue)addSection('Просрочки',['Задача','Сотрудник','Срок','Дней'],r.overdue.map(t=>[t.title,empName(t.emp),fmtDate(t.due),daysBetween(t.due,today())]));if(s.parts.questions)addSection('Открытые вопросы',['Тема','Сотрудник','Вопрос'],r.questions.map(q=>[q.topic,empName(q.emp),q.text]));if(s.parts.docs){addSection('Справки',['Файл','Дата','Результат'],state.docs.map(d=>[d.name,fmtDT(d.date),d.errors.length?'Ошибок: '+d.errors.length:'Расчёты ок']));addSection('Расхождения',['Файл','Ячейка','Описание'],state.docs.flatMap(d=>d.errors.map(e=>[d.name,(e.sheet||'')+' '+(e.cell||''),e.desc])))}if(s.parts.dynamics){const days=Array.from({length:7},(_,i)=>addDays(today(),i-6));addSection('Динамика за 7 дней',['Дата','Создано','Выполнено'],days.map(d=>[fmtDate(d),r.tasks.filter(t=>t.created===d).length,r.tasks.filter(t=>t.doneAt===d).length]))}const blob=await Packer.toBlob(new Document({sections:[{children}]}));downloadBlob(blob,name+'.docx');log('Выгружена сводная справка Word');save();toast('Справка Word сформирована')}catch(e){console.error(e);toast('Не удалось сформировать Word: '+e.message)}}
+}
+function reportText(r){const div=document.createElement('div');div.innerHTML=reportHTML(r.s);return div.innerText.replace(/\n{3,}/g,'\n\n')}
+function downloadBlob(blob,name){if(window.saveAs)return saveAs(blob,name);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),30000)}
+function libError(name){toast('Библиотека '+name+' не загружена. Проверьте интернет и перезагрузите страницу.')}
+// Документы: извлечение, индексация и аудит
+function cellText(c){if(c==null)return '';if(typeof c==='object'&&'v' in c)return String(c.v??'');return String(c)}
+function cellValue(c){const raw=typeof c==='object'&&c&&'v' in c?c.v:c;if(typeof raw==='number')return raw;const n=Number(String(raw??'').replace(/\s/g,'').replace(',','.'));return isFinite(n)&&String(raw).trim()!==''?n:NaN}
+function colName(n){let s='';n++;while(n){s=String.fromCharCode(65+(n-1)%26)+s;n=Math.floor((n-1)/26)}return s}
+function parseRef(ref){const m=/^([A-Z]+)(\d+)$/i.exec(ref);if(!m)return null;let n=0;for(const ch of m[1].toUpperCase())n=n*26+ch.charCodeAt(0)-64;return {c:n-1,r:+m[2]-1}}
+function auditAll(){state.docs.forEach(d=>{d.errors=auditDoc(d)});commit('Повторно проверены загруженные справки');toast('Проверка завершена')}
+function auditDoc(d){if(d.type==='word')return auditWord(d.text||'');const errors=[];(d.sheets||[]).forEach(sheet=>auditSheet(sheet,d.name,errors));return errors}
+function auditSheet(sheet,file,errors){
+ const rows=sheet.rows||[], values=new Map();
+ rows.forEach((row,r)=>row.forEach((cell,c)=>{const v=cellValue(cell);if(Number.isFinite(v))values.set(colName(c)+(r+1),v)}));
+ const get=ref=>{const p=parseRef(ref);if(!p)return NaN;const v=cellValue(rows[p.r]?.[p.c]);return Number.isFinite(v)?v:0};
+ const formula=(f,ref)=>{try{const calc=evaluateFormula(f,get,ref);const cached=get(ref);if(calc!==null&&Number.isFinite(cached)&&Math.abs(calc-cached)>.011)errors.push({doc:file,sheet:sheet.name,cell:ref,kind:'Формула',desc:`Пересчитано: ${fmtNum(calc)}, сохранено: ${fmtNum(cached)}, расхождение: ${fmtNum(calc-cached)}`})}catch(e){/* Поддерживаются только базовые формулы. */}};
+ rows.forEach((row,r)=>row.forEach((cell,c)=>{if(cell&&typeof cell==='object'&&cell.f)formula(cell.f,colName(c)+(r+1))}));
+ const totalWord=/итог|всего|сумма/i;
+ // Строка с признаком итога: последняя числовая ячейка сравнивается с суммой чисел слева.
+ rows.forEach((row,r)=>{if(!row.some(c=>totalWord.test(cellText(c))))return;const nums=[];row.forEach((c,ci)=>{const n=cellValue(c);if(Number.isFinite(n))nums.push({ci,n})});if(nums.length<3)return;const total=nums[nums.length-1],parts=nums.slice(0,-1),sum=parts.reduce((a,p)=>a+p.n,0);if(Math.abs(total.n-sum)>.011)errors.push({doc:file,sheet:sheet.name,cell:colName(total.ci)+(r+1),kind:'Итоговая строка',desc:`Сумма статей: ${fmtNum(sum)}, указан итог: ${fmtNum(total.n)}, расхождение: ${fmtNum(sum-total.n)}`})});
+ // Для каждой строки с признаком итога проверяем непрерывный числовой блок сверху.
+ rows.forEach((row,end)=>{if(end<2||!row.some(x=>totalWord.test(cellText(x))))return;row.forEach((cell,c)=>{if(!Number.isFinite(cellValue(cell))||(cell&&typeof cell==='object'&&cell.f))return;const total=cellValue(cell);let start=end-1;while(start>=0&&Number.isFinite(cellValue(rows[start]?.[c])))start--;const nums=[];for(let r=start+1;r<end;r++)nums.push(cellValue(rows[r][c]));if(nums.length<2)return;const sum=nums.reduce((a,b)=>a+b,0);if(Math.abs(sum-total)>.011)errors.push({doc:file,sheet:sheet.name,cell:colName(c)+(end+1),kind:'Итоговый столбец',desc:`Сумма значений сверху: ${fmtNum(sum)}, указан итог: ${fmtNum(total)}, расхождение: ${fmtNum(sum-total)}`})})});
+}
+function evaluateFormula(raw,get,ref){
+ let f=String(raw).replace(/^=/,'').trim().replace(/СУММ/gi,'SUM').replace(/СРЗНАЧ/gi,'AVERAGE').replace(/\$/g,'');if(/[A-Z]+\d+\s*[:;]\s*[A-Z]+\d+\s*!/.test(f)||/\[/.test(f))return null;
+ f=f.replace(/\b(SUM|AVERAGE)\(([^()]*)\)/gi,(m,name,args)=>{const vals=[];for(const arg of args.split(/[;,]/)){const a=arg.trim();const range=a.match(/^([A-Z]+\d+):([A-Z]+\d+)$/i);if(range){const p1=parseRef(range[1]),p2=parseRef(range[2]);if(!p1||!p2)return null;if(Math.abs(p1.r-p2.r+1)*Math.abs(p1.c-p2.c+1)>10000)return null;for(let r=Math.min(p1.r,p2.r);r<=Math.max(p1.r,p2.r);r++)for(let c=Math.min(p1.c,p2.c);c<=Math.max(p1.c,p2.c);c++)vals.push(get(colName(c)+(r+1)))}else if(/^[A-Z]+\d+$/i.test(a)){if(a.toUpperCase()===ref)throw new Error('circular');vals.push(get(a))}else if(a!==''){const n=Number(a.replace(',','.'));if(!Number.isFinite(n))return null;vals.push(n)}}const val=name.toUpperCase()==='SUM'?vals.reduce((a,b)=>a+b,0):(vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0);return `(${val})`;});
+ f=f.replace(/\b[A-Z]+\d+\b/gi,m=>{if(m.toUpperCase()===ref)throw new Error('circular');return `(${get(m)})`});
+ if(!/^[\d+\-*/().\s]+$/.test(f))return null;try{const result=Function('"use strict";return ('+f+')')();return Number.isFinite(result)?result:null}catch(e){return null}
+}
+function auditWord(text){const errors=[],re=/(-?\d[\d\s]*(?:[.,]\d+)?(?:\s*\+\s*-?\d[\d\s]*(?:[.,]\d+)?)+)\s*=\s*(-?\d[\d\s]*(?:[.,]\d+)?)/g;let m;while((m=re.exec(text))&&errors.length<60){const parts=m[1].split('+').map(num),total=num(m[2]),sum=parts.reduce((a,b)=>a+b,0);if(parts.every(Number.isFinite)&&Number.isFinite(total)&&Math.abs(sum-total)>.011)errors.push({kind:'Арифметика в тексте',desc:`${m[0].slice(0,150)} — сумма слагаемых ${fmtNum(sum)}, расхождение ${fmtNum(sum-total)}`})}return errors}
+async function loadDocs(fileList){
+ const files=[...fileList].filter(f=>/\.(xlsx|xls|csv|docx)$/i.test(f.name));if(!files.length)return toast('Выберите файлы .xlsx, .xls, .csv или .docx');if(state.docs.length+files.length>50)return toast('Можно загрузить не более 50 справок');
+ let status=$('#docUploadStatus');let loaded=0;
+ for(const file of files){try{status.textContent='Обработка: '+file.name;const array=await file.arrayBuffer();let doc={id:uid(),name:file.name,size:file.size,date:new Date().toISOString(),type:'excel',errors:[]};
+  if(/\.docx$/i.test(file.name)){const result=await mammoth.extractRawText({arrayBuffer:array});doc.type='word';doc.text=result.value||''}else{if(!window.XLSX)return libError('SheetJS');const type=/\.csv$/i.test(file.name)?new TextDecoder('utf-8').decode(array):new Uint8Array(array);const wb=XLSX.read(type,{type:typeof type==='string'?'string':'array',cellFormula:true,cellDates:false});doc.sheets=wb.SheetNames.map(name=>{const ws=wb.Sheets[name],ref=ws['!ref'];if(!ref)return {name,rows:[]};const range=XLSX.utils.decode_range(ref),rows=[];for(let r=range.s.r;r<=range.e.r;r++){const row=[];for(let c=range.s.c;c<=range.e.c;c++){const cell=ws[XLSX.utils.encode_cell({r,c})];if(!cell){row.push('');continue}const value=cell.w&&!cell.f?cell.w:cell.v;row.push(cell.f?{f:cell.f,v:value}:value??'')}rows.push(row)}return {name,rows}})}
+  if(file.size<3.5*1024*1024)doc.base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
+  doc.errors=auditDoc(doc);state.docs.push(doc);log(`Загружена справка «${file.name}»${doc.errors.length?`, найдено расхождений: ${doc.errors.length}`:' — расхождений нет'}`);loaded++;save();renderDocs();
+ }catch(e){console.error(e);toast(`Не удалось прочитать ${file.name}: ${e.message}`)}}status=$('#docUploadStatus');if(status)status.textContent=`Загружено файлов: ${loaded}`;toast(`Загружено справок: ${loaded}`);$('#docFiles').value='';
+}
+function downloadDoc(d){const bin=atob(d.base64.split(',')[1]),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);const mime=d.type==='word'?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'application/octet-stream';downloadBlob(new Blob([bytes],{type:mime}),d.name)}
+// Модальные окна и формы
+function openModal(html,wide=false){$('#modalBox').innerHTML=html;$('#modalBox').classList.toggle('wide',wide);$('#overlay').classList.add('on');document.body.style.overflow='hidden';setTimeout(()=>$('#modalBox input:not([type=hidden]),#modalBox select,#modalBox textarea')?.focus(),0)}
+function closeModal(){$('#overlay').classList.remove('on');document.body.style.overflow='';$('#modalBox').innerHTML=''}
+function confirmAction(title,text,onYes){openModal(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="modal-actions"><button class="btn" data-close>Отмена</button><button class="btn danger" id="confirmYes">${esc(title)}</button></div>`);$('#confirmYes').onclick=()=>{closeModal();onYes()}}
+function taskForm(id='',empId=''){
+ const t=id?state.tasks.find(x=>x.id===id):{title:'',emp:empId||me,priority:'Средний',status:'Не начата',due:'',progress:0,note:''};if(!t)return;
+ openModal(`<h2>${id?'Редактировать задачу':'Новая задача'}</h2><form id="taskForm"><input type="hidden" name="id" value="${esc(id)}"><div class="frow"><label>Краткое наименование *</label><input name="title" required maxlength="300" value="${esc(t.title)}" placeholder="Что нужно сделать?"></div><div class="fgrid"><div class="frow"><label>Сотрудник</label><select name="emp">${state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}" ${isActive(e.id,t.emp)}>${esc(e.name)}</option>`).join('')}</select></div><div class="frow"><label>Приоритет</label><select name="priority">${priorities.map(p=>`<option ${isActive(p,t.priority)}>${p}</option>`).join('')}</select></div><div class="frow"><label>Статус</label><select name="status">${statuses.map(s=>`<option ${isActive(s,t.status)}>${s}</option>`).join('')}</select></div><div class="frow"><label>Срок исполнения</label><input type="date" name="due" value="${t.due}"></div></div><div class="frow"><label>Исполнение: <span id="formProgress">${t.progress}%</span></label><input type="range" name="progress" min="0" max="100" step="5" value="${t.progress}" style="padding:0;width:100%" oninput="document.getElementById('formProgress').textContent=this.value+'%'"></div><div class="frow"><label>Примечания</label><textarea name="note" maxlength="3000">${esc(t.note)}</textarea></div><div class="modal-actions"><button type="button" class="btn" data-close>Отмена</button><button class="btn primary">${id?'Сохранить':'Добавить задачу'}</button></div></form>`);
+ $('#taskForm').onsubmit=e=>{e.preventDefault();const fd=new FormData(e.target),nw=Object.fromEntries(fd),progress=+nw.progress;nw.progress=progress;if(progress===100)nw.status='Выполнена';else if(nw.status==='Выполнена')nw.status='В работе';if(nw.due&&!parseDate(nw.due))return;delete nw.id;
+ if(id){const old=state.tasks.find(x=>x.id===id),changes=[];[['title','название'],['emp','сотрудник'],['priority','приоритет'],['status','статус'],['due','срок'],['progress','исполнение'],['note','примечание']].forEach(([k,l])=>{if(String(old[k]??'')!==String(nw[k]))changes.push(l)});Object.assign(old,nw,{doneAt:nw.status==='Выполнена'?(old.doneAt||today()):null});commit(`Изменена задача «${old.title}»${changes.length?': '+changes.join(', '):''}`);closeModal()}else{const task={id:uid(),created:today(),doneAt:nw.status==='Выполнена'?today():null,...nw};state.tasks.push(task);commit(`Создана задача «${task.title}»`);closeModal();toast('Задача добавлена')}};
+}
+function questionForm(){if(!me)return toast('Выберите сотрудника');openModal(`<h2>Задать вопрос</h2><form id="questionForm"><div class="frow"><label>Тема *</label><input name="topic" required maxlength="200"></div><div class="frow"><label>Вопрос *</label><textarea name="text" required></textarea></div><div class="frow"><label>Привязка к задаче</label><select name="taskId"><option value="">Без задачи</option>${state.tasks.filter(t=>t.emp===me&&active(t)).map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('')}</select></div><div class="modal-actions"><button type="button" class="btn" data-close>Отмена</button><button class="btn primary">Отправить вопрос</button></div></form>`);$('#questionForm').onsubmit=e=>{e.preventDefault();const o=Object.fromEntries(new FormData(e.target));state.questions.unshift({id:uid(),emp:me,...o,date:new Date().toISOString(),answer:'',answeredBy:'',answerDate:''});commit(`Задан вопрос «${o.topic}»`);closeModal();toast('Вопрос сохранён — он будет виден руководителю')}}
+function addQuestionFromForm(form){const o=Object.fromEntries(new FormData(form));state.questions.unshift({id:uid(),emp:me,...o,date:new Date().toISOString(),answer:'',answeredBy:'',answerDate:''});form.reset();commit(`Задан вопрос «${o.topic}»`);toast('Вопрос сохранён')}
+function employeesModal(){
+ openModal(`<h2>Сотрудники</h2><div id="employeeRows">${state.employees.map(e=>`<div class="toolbar" style="border-bottom:1px solid var(--line);padding-bottom:9px"><input data-emp-name="${e.id}" value="${esc(e.name)}" style="flex:1" maxlength="120"><select data-emp-role="${e.id}"><option value="employee" ${isActive('employee',e.role)}>Сотрудник</option><option value="manager" ${isActive('manager',e.role)}>Руководитель</option></select><label class="small"><input type="checkbox" data-emp-active="${e.id}" ${checked(e.active)}> активен</label></div>`).join('')}</div><div class="section-t">Добавить сотрудника</div><form id="employeeForm"><div class="frow"><label>ФИО *</label><input name="name" required maxlength="120"></div><div class="frow"><label>Роль</label><select name="role"><option value="employee">Сотрудник</option><option value="manager">Руководитель</option></select></div><div class="modal-actions"><button type="button" class="btn" id="saveEmployees">Сохранить изменения</button><button type="button" class="btn" data-close>Закрыть</button><button class="btn primary">Добавить</button></div></form>`);
+ $('#employeeForm').onsubmit=e=>{e.preventDefault();saveEmployees();const o=Object.fromEntries(new FormData(e.target));state.employees.push({id:uid(),name:o.name.trim(),role:o.role,active:true});if(!me)me=state.employees[0].id;commit(`Добавлен сотрудник «${o.name}»`);employeesModal()};
+ $('#saveEmployees').onclick=()=>{saveEmployees();commit('Обновлён список сотрудников');closeModal()};
+}
+function saveEmployees(){state.employees.forEach(e=>{const name=$(`[data-emp-name="${e.id}"]`);if(name)e.name=name.value.trim()||e.name;e.role=$(`[data-emp-role="${e.id}"]`)?.value||e.role;e.active=$(`[data-emp-active="${e.id}"]`)?.checked??e.active});if(!currentEmp()?.active)me=state.employees.find(e=>e.active)?.id||state.employees[0]?.id||''}
+function showErrors(d){openModal(`<h2>${d.errors.length?'Найденные расхождения':'Проверка расчётов'}</h2><p class="small muted" style="margin-bottom:12px">${esc(d.name)}${d.errors.length?` · показаны первые ${Math.min(60,d.errors.length)} из ${d.errors.length}`:' · расхождений не обнаружено'}</p>${d.errors.length?`<div class="tblwrap"><table><thead><tr><th>Тип</th><th>Лист</th><th>Ячейка</th><th>Описание</th></tr></thead><tbody>${auditErrorsHTML(d)}</tbody></table></div>`:'<div class="banner blue">Проверка охватывает базовые формулы, итоговые строки/столбцы и арифметику в тексте. Сложные модели требуют ручной проверки.</div>'}<div class="modal-actions"><button class="btn" data-close>Закрыть</button></div>`,true)}
+// События
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b){currentTab=b.dataset.tab;render()}});
+document.addEventListener('click',e=>{
+ const tab=e.target.closest('[data-tab]');if(tab&&!$('#tabs').contains(tab)){currentTab=tab.dataset.tab;render();return}
+ if(e.target.closest('[data-close]')){closeModal();return}
+ if(e.target===$('#overlay')){closeModal();return}
+ const b=e.target.closest('button,[data-task]');if(!b)return;
+ if(b.dataset.newTask!==undefined){e.preventDefault();taskForm('',b.dataset.newTask||me)}
+ if(b.dataset.edit)taskForm(b.dataset.edit);
+ if(b.dataset.task){e.preventDefault();taskForm(b.dataset.task)}
+ if(b.dataset.complete){const t=state.tasks.find(x=>x.id===b.dataset.complete);if(t){if(t.status==='Выполнена'){t.status='В работе';t.progress=Math.min(95,t.progress);t.doneAt=null;commit(`Задача «${t.title}» возвращена в работу`)}else{t.status='Выполнена';t.progress=100;t.doneAt=today();commit(`Выполнена задача «${t.title}»`)}}}
+ if(b.dataset.delTask){const t=state.tasks.find(x=>x.id===b.dataset.delTask);if(t)confirmAction('Удалить задачу',t.title,()=>{state.tasks=state.tasks.filter(x=>x.id!==t.id);commit(`Удалена задача «${t.title}»`);toast('Задача удалена')})}
+ if(b.dataset.newQ!==undefined)questionForm();
+ if(b.dataset.delQ){const q=state.questions.find(x=>x.id===b.dataset.delQ);if(q)confirmAction('Удалить вопрос',q.topic,()=>{state.questions=state.questions.filter(x=>x.id!==q.id);commit(`Удалён вопрос «${q.topic}»`)})}
+ if(b.dataset.empToggle){openEmps[b.dataset.empToggle]=!openEmps[b.dataset.empToggle];renderTeam()}
+ if(b.dataset.week){if(b.dataset.week==='now'){const d=new Date(),n=(d.getDay()+6)%7;d.setDate(d.getDate()-n);weekStart=iso(d)}else weekStart=addDays(weekStart,+b.dataset.week);renderWeek()}
+ if(b.dataset.gotoOverdue!==undefined){filters={...filters,status:'',priority:'',hideDone:true,q:''};$('#pane-day').querySelector('[data-filter="status"]').value='';const rows=$$('[data-taskrow]');rows.forEach(r=>r.style.display=overdue(state.tasks.find(t=>t.id===r.dataset.taskrow))?'':'none')}
+ if(b.dataset.enableManager!==undefined){managerMode=true;render()}
+ if(b.dataset.docErrors){const d=state.docs.find(x=>x.id===b.dataset.docErrors);if(d)showErrors(d)}
+ if(b.dataset.docDownload){const d=state.docs.find(x=>x.id===b.dataset.docDownload);if(d)downloadDoc(d)}
+ if(b.dataset.docDel){const d=state.docs.find(x=>x.id===b.dataset.docDel);if(d)confirmAction('Удалить справку',d.name,()=>{state.docs=state.docs.filter(x=>x.id!==d.id);commit(`Удалена справка «${d.name}»`)})}
+ if(b.dataset.reportFormat){e.preventDefault();exportReport(b.dataset.reportFormat)}
+ if(b.id==='checkAllDocs')auditAll();
+ if(b.id==='clearAllDocs')confirmAction('Очистить все справки','Будут удалены загруженные файлы, их индексы и результаты проверок.',()=>{state.docs=[];commit('Очищена библиотека справок')});
+ if(b.id==='docSearchBtn'){docSearch=$('#docSearchInput').value.trim();$('#docSearchResults').innerHTML=docSearch?docSearchHTML(docSearch):'<div class="empty">Введите поисковый запрос.</div>'}
+});
+let progressTimer;
+document.addEventListener('input',e=>{if(e.target.dataset.progress){$(`[data-pv="${e.target.dataset.progress}"]`).textContent=e.target.value+'%';clearTimeout(progressTimer);const id=e.target.dataset.progress,v=+e.target.value;progressTimer=setTimeout(()=>updateProgress(id,v),250)}});
+function updateProgress(id,v){const t=state.tasks.find(x=>x.id===id);if(!t||t.progress===v)return;const old=t.progress;t.progress=v;if(v===100){t.status='Выполнена';t.doneAt=today()}else if(t.status==='Выполнена'){t.status='В работе';t.doneAt=null}else if(v>0&&t.status==='Не начата')t.status='В работе';commit(`Изменено исполнение задачи «${t.title}»: ${old}% → ${v}%`)}
+document.addEventListener('change',e=>{
+ if(e.target.id==='meSel'){me=e.target.value;localStorage.setItem(DB_KEY+'-me',me);managerMode=false;render()}
+ if(e.target.dataset.filter){const k=e.target.dataset.filter;filters[k]=e.target.type==='checkbox'?e.target.checked:e.target.value;render()}
+ if(e.target.dataset.qfilter){qFilters[e.target.dataset.qfilter]=e.target.value;renderQuestions()}
+ if(e.target.dataset.weekEmp!==undefined){weekEmp=e.target.value;renderWeek()}
+ if(e.target.dataset.chartEmp!==undefined){chartEmp=e.target.value;renderCharts()}
+ if(e.target.dataset.histEmp!==undefined){historyEmp=e.target.value;$('#historyList').innerHTML=historyList()}
+ if(e.target.id==='docFiles')loadDocs(e.target.files);
+});
+document.addEventListener('input',e=>{
+ if(e.target.dataset.filter==='q'){const value=e.target.value;clearTimeout(e.target._timer);e.target._timer=setTimeout(()=>{filters.q=value;render();const input=$('[data-filter="q"]');if(input){input.focus();input.setSelectionRange(value.length,value.length)}},250)}
+ if(e.target.dataset.qfilter==='q'){const value=e.target.value;clearTimeout(e.target._timer);e.target._timer=setTimeout(()=>{qFilters.q=value;renderQuestions();const input=$('[data-qfilter="q"]');if(input){input.focus();input.setSelectionRange(value.length,value.length)}},250)}
+ if(e.target.dataset.histQ!==undefined){historyQ=e.target.value;$('#historyList').innerHTML=historyList()}
+});
+document.addEventListener('submit',e=>{
+ if(e.target.id==='quickQuestion'){e.preventDefault();addQuestionFromForm(e.target)}
+ if(e.target.dataset.answerForm){e.preventDefault();const q=state.questions.find(x=>x.id===e.target.dataset.answerForm),answer=new FormData(e.target).get('answer').trim();if(q&&answer&&(q.emp===me||currentEmp()?.role==='manager')){q.answer=answer;q.answeredBy=me;q.answerDate=new Date().toISOString();commit(`Дан ответ на вопрос «${q.topic}»`);toast('Ответ сохранён')}}
+ if(e.target.id==='reportForm')e.preventDefault();
+});
+$('#modeEmpBtn').onclick=()=>{managerMode=false;render()};$('#modeMgrBtn').onclick=()=>{managerMode=true;currentTab='team';render()};
+$('#empBtn').onclick=employeesModal;
+$('#exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify({app:'Рабочая панель',version:1,exported:new Date().toISOString(),data:state},null,2)],{type:'application/json'});downloadBlob(blob,`Рабочая_панель_резервная_копия_${today()}.json`);toast('Резервная копия выгружена')};
+$('#importBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const raw=JSON.parse(await file.text()),data=raw.data||raw;if(!Array.isArray(data.employees)||!Array.isArray(data.tasks)||!Array.isArray(data.questions))throw new Error('Не найдены списки сотрудников, задач и вопросов');confirmAction('Заменить текущие данные','Импорт заменит все задачи, вопросы, справки и журнал. Сначала рекомендуется сделать экспорт.',()=>{state=normalize(data);me=state.employees.find(e=>e.active)?.id||state.employees[0]?.id||'';commit('Импортирована резервная копия');location.reload()})}catch(err){toast('Неверный формат файла: '+err.message)}e.target.value=''};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();if(e.key==='Enter'&&e.target.id==='docSearchInput'){e.preventDefault();$('#docSearchBtn').click()}});
+// Запуск
+load();me=localStorage.getItem(DB_KEY+'-me')||'';if(!state.employees.some(e=>e.id===me&&e.active))me=state.employees.find(e=>e.active)?.id||state.employees[0]?.id||'';render();
+})();
+
+</script>
+</body>
+</html>
